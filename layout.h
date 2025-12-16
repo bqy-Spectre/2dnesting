@@ -34,7 +34,7 @@ namespace nesting {
         size_t poly_num{ 0 };
         size_t pd_count{ 0 };
         size_t pd_miss{ 0 };
-        // 多板，但每个板都是相同的矩形
+        // 多板，板可能为矩形或圆形
         std::vector<Sheet> sheets;
         // 已计算的nfp缓存
         std::unordered_map<NFPCacheKey, NFPCacheValue, NFPCacheKeyHasher> nfp_cache;

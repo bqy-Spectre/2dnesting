@@ -24,6 +24,8 @@ namespace nesting {
         const double part_offset,
         const double sheet_width,
         const double sheet_height,
+        const bool sheet_is_circle,
+        const double sheet_radius,
         const std::vector<nesting::geo::Polygon_with_holes_2>& polygons,
         const std::vector<uint32_t>& items_rotations,
         const std::vector<uint32_t>& items_quantity) {
@@ -40,7 +42,8 @@ namespace nesting {
             area += geo::pwh_area(i.poly) * FT(i.quantity);
         }
         // 处理sheet
-        nesting::Sheet sheet(sheet_width, sheet_height);
+        nesting::Sheet sheet = sheet_is_circle ? nesting::Sheet(geo::FT(sheet_radius))
+                                               : nesting::Sheet(geo::FT(sheet_width), geo::FT(sheet_height));
         std::vector<nesting::Sheet> original_sheets{ sheet };
         // 获取副本
         std::vector<nesting::Sheet> sheets;

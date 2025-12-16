@@ -238,6 +238,7 @@
     <ClCompile Include="libdxfrw\libdwgr.cpp" />
     <ClCompile Include="libdxfrw\libdxfrw.cpp" />
     <ClCompile Include="nesting.cpp" />
+    <ClCompile Include="nesting_gui_destructor.cpp" />
     <ClCompile Include="postprocess.cpp" />
     <ClCompile Include="preprocess.cpp" />
     <ClCompile Include="svg_helper.cpp" />

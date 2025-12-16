@@ -28,6 +28,8 @@ public:
         const double _part_offset,
         const double _sheet_width,
         const double _sheet_height,
+        const bool _sheet_is_circle,
+        const double _sheet_radius,
         const size_t _max_time,
         const std::vector<nesting::geo::Polygon_with_holes_2>& _polygons,
         const std::vector<uint32_t>& _items_rotations,
@@ -40,6 +42,8 @@ public:
         part_offset = _part_offset;
         sheet_width = _sheet_width;
         sheet_height = _sheet_height;
+        sheet_is_circle = _sheet_is_circle;
+        sheet_radius = _sheet_radius;
         max_time = _max_time;
         polygons = _polygons;
         items_rotations = _items_rotations;
@@ -69,6 +73,8 @@ private:
     double part_offset{ 0 };
     double sheet_width{ 0 };
     double sheet_height{ 0 };
+    bool sheet_is_circle{ false };
+    double sheet_radius{ 0 };
     size_t max_time{ 0 };
     std::vector<nesting::geo::Polygon_with_holes_2> polygons;
     std::vector<uint32_t> items_rotations;
@@ -85,7 +91,7 @@ private:
         try {
             p = new nesting::Preprocess(nesting::preprocess(
                 need_simplify, top_offset, left_offset, bottom_offset, right_offset,
-                part_offset, sheet_width, sheet_height, polygons, items_rotations,
+                part_offset, sheet_width, sheet_height, sheet_is_circle, sheet_radius, polygons, items_rotations,
                 items_quantity));
         }
         catch (const std::runtime_error& e) {

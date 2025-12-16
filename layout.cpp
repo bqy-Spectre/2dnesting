@@ -45,9 +45,24 @@ namespace nesting {
         pd_cache.reserve(max_pd_cache);
 
         std::clog << "total_area: " << area << std::endl;
-        std::clog << sheets[0].height << std::endl;
+        // print sheet dimension appropriately for circle/rectangle
+        if (!sheets.empty()) {
+            if (sheets[0].is_circle()) {
+                std::clog << "sheet radius: " << CGAL::to_double(sheets[0].get_radius()) << std::endl;
+            }
+            else {
+                std::clog << "sheet height: " << CGAL::to_double(sheets[0].get_height()) << std::endl;
+            }
+        }
         FT min_length(max_x_span);
-        lower_length = std::max(area / sheets[0].height, min_length);
+        // For circular sheets, using area / height does not make sense for lower length bound.
+        // Use min_length (based on max_x_span) as a safe lower bound for circular sheets.
+        if (!sheets.empty() && sheets[0].is_circle()) {
+            lower_length = min_length;
+        }
+        else {
+            lower_length = std::max(area / sheets[0].get_height(), min_length);
+        }
         //lower_length = area / sheets[0].height;
     }
     Polygon_with_holes_2* Layout::get_canonical_polygon(

@@ -16,7 +16,10 @@ public:
 	LayoutWidget(QWidget* parent = nullptr) : QOpenGLWidget(parent) {}
 
 	void initialize_transform();
-	void set_sheet(qreal w, qreal h);
+	// Set rectangular sheet
+	void set_sheet_rect(qreal w, qreal h);
+	// Set circular sheet by radius
+	void set_sheet_circle(qreal radius);
 public slots:
 	void layoutUpdate(QTableWidgetItem* n, QTableWidgetItem* o);
 
@@ -39,4 +42,5 @@ private:
 	QRectF sheet;
 	QList<QPolygonF> layout;
 	qreal length{ -1 };
+	bool isCircle{ false };
 };

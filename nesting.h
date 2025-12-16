@@ -50,8 +50,10 @@ namespace nesting {
 
     inline void expand(Layout& layout) {
         layout.cur_length *= (1 + layout.rinc);
-        // 更新sheet
-        layout.sheets[0].set_width(layout.cur_length);
+        // 更新sheet only for rectangular sheets
+        if (!layout.sheets.empty() && !layout.sheets[0].is_circle()) {
+            layout.sheets[0].set_width(layout.cur_length);
+        }
     }
 
     // 一个简单的计算初始解的算法，目前适用于二维带排样

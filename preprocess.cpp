@@ -40,8 +40,23 @@ namespace nesting {
             vertical -= bottom_offset;
             horizontal -= left_offset;
             horizontal -= right_offset;
-            sheet.set_height(sheet.height + vertical);
-            sheet.set_width(sheet.width + horizontal);
+            // Compute new bounding dimensions after applying offsets
+            double new_height = CGAL::to_double(sheet.height) + vertical;
+            double new_width = CGAL::to_double(sheet.width) + horizontal;
+            if (new_height < 0) new_height = 0;
+            if (new_width < 0) new_width = 0;
+            // If sheet is treated as circle, set radius based on the minimum
+            // dimension (diameter = min(width, height)). Otherwise keep
+            // rectangle semantics.
+            if (sheet.is_circle()) {
+                double new_d = std::min(new_width, new_height);
+                if (new_d < 0) new_d = 0;
+                sheet.set_radius(geo::FT(new_d / 2.0));
+            }
+            else {
+                sheet.set_height(geo::FT(new_height));
+                sheet.set_width(geo::FT(new_width));
+            }
         }
     }  // namespace geo
 }  // namespace nesting

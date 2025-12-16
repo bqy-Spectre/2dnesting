@@ -1,4 +1,5 @@
 ﻿#include "layout_widget.h"
+#include <QPainterPath>
 
 void LayoutWidget::initialize_transform() {
     globalTransform.reset();
@@ -11,8 +12,15 @@ void LayoutWidget::initialize_transform() {
     globalTransform.scale(scale, scale);
 }
 
-void LayoutWidget::set_sheet(qreal w, qreal h) {
+void LayoutWidget::set_sheet_rect(qreal w, qreal h) {
+    isCircle = false;
     sheet = QRectF(0, 0, w, h);
+}
+
+void LayoutWidget::set_sheet_circle(qreal radius) {
+    isCircle = true;
+    qreal d = radius * 2.0;
+    sheet = QRectF(0, 0, d, d);
 }
 
 void LayoutWidget::initializeGL() {
@@ -39,13 +47,27 @@ void LayoutWidget::paintEvent(QPaintEvent* event) {
     QPen sheetPen = scaledPen;
     sheetPen.setWidthF(sheetPen.widthF() * 1.5);
 
-    // 绘制sheet
+    // 绘制sheet，根据类型
     painter.setTransform(globalTransform);
     painter.setPen(sheetPen);
-    painter.drawRect(sheet);
+    painter.setBrush(Qt::NoBrush);
+    if (isCircle) {
+        painter.drawEllipse(sheet);
+    } else {
+        painter.drawRect(sheet);
+    }
+
+    // Clip to boundary
+    QPainterPath clipPath;
+    if (isCircle) {
+        clipPath.addEllipse(sheet);
+    } else {
+        clipPath.addRect(sheet);
+    }
+    painter.setClipPath(clipPath);
 
     // 绘制多边形
-    QPen polygonPen = scaledPen;  // 使用相同的线宽
+    QPen polygonPen = scaledPen;
     painter.setPen(polygonPen);
     painter.setBrush(Qt::gray);
     for (auto& p : layout) {
@@ -99,14 +121,9 @@ void LayoutWidget::mouseMoveEvent(QMouseEvent* event) {
 void LayoutWidget::layoutUpdate(QTableWidgetItem* n, QTableWidgetItem* o) {
     qDebug() << "layoutUpdate START";
     if (n != nullptr) {
-        qDebug() << "n: " << n->data(Qt::DisplayRole);
-        qDebug() << "o: " << n->data(Qt::DisplayRole);
         auto i = n->tableWidget()->item(n->row(), 0);
         auto v = i->data(Qt::UserRole).value<QList<QPolygonF>>();
         auto len = i->data(Qt::DisplayRole).value<qreal>();
-        for (auto& p : v) {
-            qDebug() << p;
-        }
         this->layout = v;
         this->length = len;
         initialize_transform();

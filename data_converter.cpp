@@ -76,8 +76,9 @@ namespace nesting {
         }
         outputFile << std::setiosflags(std::ios::fixed) << std::setprecision(8);
         outputFile << "Best Utilization: " << best_utilization << std::endl;
-        outputFile << "Sheet (W, L): "
-            << "(" << sheet_width << ", " << sheet_length << ")" << std::endl;
+        // For circular sheets we treat the diameter as the minimum of provided width and length
+        double diameter = std::min(sheet_width, sheet_length);
+        outputFile << "Sheet (Diameter): " << diameter << std::endl;
         outputFile << "Placement: " << std::endl;
         for (auto& pwh : res) {
             outputFile << pwh << std::endl;
@@ -123,10 +124,13 @@ namespace nesting {
             << -0.25 * sheet_width << ", " << 1.5 * sheet_length << ", "
             << 1.5 * sheet_width << "\" xmlns=\"http://www.w3.org/2000/svg\">"
             << std::endl;
-        // sheet
-        outputFile << "<rect width=\"" << sheet_length << "\" height=\""
-            << sheet_width << "\" fill=\"white\" stroke=\"black\"/>"
-            << std::endl;
+        // sheet -> draw circle centered in viewBox using min dimension as diameter
+        double d = std::min(sheet_length, sheet_width);
+        double cx = sheet_length / 2.0;
+        double cy = sheet_width / 2.0;
+        double r = d / 2.0;
+        outputFile << "<circle cx=\"" << cx << "\" cy=\"" << cy << "\" r=\"" << r
+            << "\" fill=\"white\" stroke=\"black\"/>" << std::endl;
         // polygons
         for (auto& pwh : res) {
             polygon_to_svg(outputFile, pwh);

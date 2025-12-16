@@ -1,4 +1,10 @@
 ﻿#include "nesting.h"
+#include <cmath>
+
+// Define PI for MSVC where M_PI may be unavailable
+#ifndef PI
+static constexpr double PI = 3.14159265358979323846;
+#endif
 
 namespace nesting {
     NFPCacheValue& comp_nfp(const Polygon_with_holes_2* poly_A,
@@ -45,6 +51,7 @@ namespace nesting {
             return kv->second;
         }
     }
+
     FT comp_pd(NFPCacheValue& v, double px, double py, Layout& layout) {
         auto& original_nfp = v.nfp;
         if (px <= v.xmin || px >= v.xmax || py <= v.ymin || py >= v.ymax) {
@@ -66,6 +73,7 @@ namespace nesting {
         }
         return pd;
     }
+
     void shrink(Layout& layout) {
         layout.cur_length = layout.best_length * (1 - layout.rdec);
         if (layout.cur_length < layout.lower_length) {
@@ -78,13 +86,50 @@ namespace nesting {
             auto right_vertex = p.transformed.outer_boundary().right_vertex();
             auto x = right_vertex->x();
             if (x > layout.cur_length) {
-                auto ifr = geo::comp_ifr(layout.sheets[0].sheet, p.transformed);
-                auto bbox = ifr.bbox();
-                double random_x;
-                double random_y;
-                // 放置策略：随机放置
-                random_x = bbox.x_span() * rand::right_nd01() + bbox.xmin();
-                random_y = bbox.y_span() * rand::center_nd01() + bbox.ymin();
+                // compute IFR differently for circular sheet
+                geo::Polygon_2 ifr_poly;
+                if (layout.sheets[0].is_circle()) {
+                    // build inner circle representing allowable reference-point positions
+                    geo::FT R = layout.sheets[0].get_radius();
+                    auto first_v = p.transformed.outer_boundary().vertices_begin();
+                    // compute max squared distance in double to avoid exact-type issues
+                    double max_sq_d = 0.0;
+                    for (auto vtx = p.transformed.outer_boundary().vertices_begin();
+                        vtx != p.transformed.outer_boundary().vertices_end(); ++vtx) {
+                        double dx = CGAL::to_double(vtx->x() - first_v->x());
+                        double dy = CGAL::to_double(vtx->y() - first_v->y());
+                        double d2 = dx * dx + dy * dy;
+                        if (d2 > max_sq_d) max_sq_d = d2;
+                    }
+                    geo::FT rB = geo::FT(std::sqrt(max_sq_d));
+                    geo::FT innerR = R - rB;
+                    if (innerR <= geo::FT(0)) {
+                        // no feasible area
+                        ifr_poly.clear();
+                    }
+                    else {
+                        const int SEGMENTS = 128;
+                        double cx = CGAL::to_double(R);
+                        double cy = CGAL::to_double(R);
+                        double rr = CGAL::to_double(innerR);
+                        for (int s = 0; s < SEGMENTS; ++s) {
+                            double theta = 2.0 * PI * s / SEGMENTS;
+                            double xpt = cx + rr * std::cos(theta);
+                            double ypt = cy + rr * std::sin(theta);
+                            ifr_poly.push_back(Point_2(xpt, ypt));
+                        }
+                        // translate so that B's first vertex is at origin (match comp_ifr behavior)
+                        Transformation translate(CGAL::TRANSLATION,
+                            Vector_2(-first_v->x(), -first_v->y()));
+                        ifr_poly = transform(translate, ifr_poly);
+                    }
+                }
+                else {
+                    ifr_poly = geo::comp_ifr(layout.sheets[0].sheet, p.transformed);
+                }
+                auto bbox = ifr_poly.bbox();
+                double random_x = bbox.x_span() * rand::right_nd01() + bbox.xmin();
+                double random_y = bbox.y_span() * rand::center_nd01() + bbox.ymin();
                 p.set_translate(random_x, random_y);
                 v.push_back(i);
             }
@@ -108,109 +153,158 @@ namespace nesting {
                 auto& nfp =
                     comp_nfp(q.base, q.get_rotation(), q.allowed_rotations, p.base,
                         p.get_rotation(), p.allowed_rotations, layout);
-                Point_2 relative_point(px - qx, py - qy);
                 auto pd =
                     comp_pd(nfp, double_px - double_qx, double_py - double_qy, layout);
                 layout.set_pd(i, j, pd);
             }
         }
-        // 更新sheet
-        layout.sheets[0].set_width(layout.cur_length);
+        // 更新sheet only for rectangular sheets
+        if (!layout.sheets.empty() && !layout.sheets[0].is_circle()) {
+            layout.sheets[0].set_width(layout.cur_length);
+        }
     }
-    void get_init_solu(Layout& layout) {
-        //std::ofstream s("init.txt", std::ios::out);
-        //s << "init solu start" << std::endl;
-        size_t num_poly = layout.poly_num;
-        for (size_t i = 0; i < num_poly; i++) {
-            auto& shape_i = layout.sheet_parts[0][i];
-            auto& polygon_i = shape_i.transformed;
-            auto rotation_i = shape_i.get_rotation();
-            auto& ix = shape_i.get_translate_ft_x();
-            auto& iy = shape_i.get_translate_ft_y();
-            auto double_ix = CGAL::to_double(ix);
-            auto double_iy = CGAL::to_double(iy);
-            auto ifr = geo::comp_ifr(layout.sheets[0].sheet, polygon_i);
-            CandidatePoints c(layout.poly_num - 1);
-            c.set_boundary(ifr);
-            for (size_t j = 0; j < num_poly; j++) {
-                if (j == i) {
-                    continue;
-                }
-                auto& shape_j = layout.sheet_parts[0][j];
-                auto& jx = shape_j.get_translate_ft_x();
-                auto& jy = shape_j.get_translate_ft_y();
-                auto double_jx = shape_j.get_translate_double_x();
-                auto double_jy = shape_j.get_translate_double_y();
-                auto translate = shape_j.get_translate();
-                auto rotation_j = shape_j.get_rotation();
-                auto& nfp =
-                    comp_nfp(shape_j.base, rotation_j, shape_j.allowed_rotations,
-                        shape_i.base, rotation_i, shape_i.allowed_rotations, layout);
-                FT pd;
-                // j < i时的pd已经被更新
-                if (j > i) {
-                    Point_2 relative_point(ix - jx, iy - jy);
 
-                    pd = comp_pd(nfp, double_ix - double_jx, double_iy - double_jy, layout);
+    void get_init_solu(Layout& layout) {
+        // Greedy initial placement optimized for circular sheets
+        size_t num_poly = layout.poly_num;
+        if (num_poly == 0) return;
+
+        // Ensure circular sheet
+        if (layout.sheets.empty() || !layout.sheets[0].is_circle()) {
+            throw std::runtime_error("get_init_solu requires a circular sheet");
+        }
+
+        // Build ordering: by area desc, then by max edge desc
+        struct Key { size_t idx; double area; double max_edge; };
+        std::vector<Key> keys; keys.reserve(num_poly);
+        for (size_t i = 0; i < num_poly; ++i) {
+            auto& sh = layout.sheet_parts[0][i];
+            double a = CGAL::to_double(geo::pwh_area(sh.transformed));
+            double max_e = 0.0;
+            auto& outer = sh.transformed.outer_boundary();
+            for (auto v = outer.vertices_begin(); v != outer.vertices_end(); ++v) {
+                auto next = v; ++next;
+                if (next == outer.vertices_end()) next = outer.vertices_begin();
+                double dx = CGAL::to_double(next->x() - v->x());
+                double dy = CGAL::to_double(next->y() - v->y());
+                double len = std::sqrt(dx*dx + dy*dy);
+                if (len > max_e) max_e = len;
+            }
+            keys.push_back({i, a, max_e});
+        }
+        std::sort(keys.begin(), keys.end(), [](const Key& A, const Key& B){
+            if (A.area != B.area) return A.area > B.area;
+            return A.max_edge > B.max_edge;
+        });
+
+        double sheetR_d = CGAL::to_double(layout.sheets[0].get_radius());
+
+        // Place shapes greedily
+        for (size_t ord = 0; ord < num_poly; ++ord) {
+            size_t i = keys[ord].idx;
+            auto& shape_i = layout.sheet_parts[0][i];
+            auto rotation_i = shape_i.get_rotation();
+
+            // compute B's max distance rB and inner feasible radius innerR
+            auto& poly = shape_i.transformed.outer_boundary();
+            auto first_v = poly.vertices_begin();
+            double max_sq_d = 0.0;
+            for (auto v = poly.vertices_begin(); v != poly.vertices_end(); ++v) {
+                double dx = CGAL::to_double(v->x() - first_v->x());
+                double dy = CGAL::to_double(v->y() - first_v->y());
+                double d2 = dx*dx + dy*dy;
+                if (d2 > max_sq_d) max_sq_d = d2;
+            }
+            double rB = std::sqrt(max_sq_d);
+            double innerR = sheetR_d - rB;
+
+            geo::Polygon_2 ifr;
+            if (innerR > 0.0) {
+                const int SEGMENTS = 64; // reduced for speed
+                double cx = sheetR_d;
+                double cy = sheetR_d;
+                for (int s = 0; s < SEGMENTS; ++s) {
+                    double theta = 2.0 * PI * s / SEGMENTS;
+                    double x = cx + innerR * std::cos(theta);
+                    double y = cy + innerR * std::sin(theta);
+                    ifr.push_back(Point_2(x, y));
+                }
+                Transformation translate(CGAL::TRANSLATION, Vector_2(-first_v->x(), -first_v->y()));
+                ifr = transform(translate, ifr);
+            }
+
+            CandidatePoints c(num_poly - 1);
+            c.max_candidate_points = 64;
+            c.batch_size = 8;
+            c.set_boundary(ifr);
+
+            // collect NFPs and translations for other parts
+            for (size_t j = 0; j < num_poly; ++j) {
+                if (j == i) continue;
+                auto& shape_j = layout.sheet_parts[0][j];
+                auto& nfp = comp_nfp(shape_j.base, shape_j.get_rotation(), shape_j.allowed_rotations,
+                                     shape_i.base, rotation_i, shape_i.allowed_rotations, layout);
+                c.nfps.push_back(&nfp);
+                c.translations.push_back(shape_j.get_translate());
+                c.translate_x.push_back(shape_j.get_translate_double_x());
+
+                // initialize upper-triangle pd entries when j>i
+                if (j > i) {
+                    double pdx = CGAL::to_double(shape_i.get_translate_ft_x() - shape_j.get_translate_ft_x());
+                    double pdy = CGAL::to_double(shape_i.get_translate_ft_y() - shape_j.get_translate_ft_y());
+                    FT pd = comp_pd(nfp, pdx, pdy, layout);
                     layout.set_pd(i, j, pd);
                 }
-                c.nfps.push_back(&nfp);
-                c.translations.push_back(translate);
-                c.translate_x.push_back(double_jx);
             }
+
             c.initialize();
             auto points = c.get_perfect_points();
-            // points为空时
             if (points.empty()) {
-                std::cerr << "Error: Candidate points set is empty" << std::endl;
-                break;
+                // fallback: place at center of circle
+                Point_2 center(sheetR_d, sheetR_d);
+                shape_i.set_translate(center.x(), center.y());
+                for (size_t j = 0; j < num_poly; ++j) {
+                    if (j == i) continue;
+                    size_t idx_k = (j < i) ? j : j - 1;
+                    auto& nfp = c.nfps[idx_k];
+                    double pdx = CGAL::to_double(center.x() - layout.sheet_parts[0][j].get_translate_ft_x());
+                    double pdy = CGAL::to_double(center.y() - layout.sheet_parts[0][j].get_translate_ft_y());
+                    FT pd = comp_pd(*nfp, pdx, pdy, layout);
+                    layout.set_pd(i, j, pd);
+                }
+                continue;
             }
-            auto& first_point = points[0];
-            auto first_x = first_point.x();
-            auto first_y = first_point.y();
-            auto double_first_x = CGAL::to_double(first_x);
-            auto double_first_y = CGAL::to_double(first_y);
-            for (size_t j = 0; j < num_poly; j++) {
-                size_t k = j;
-                if (i == j) {
-                    continue;
-                }
-                else if (j > i) {
-                    k--;
-                }
-                auto& nfp = c.nfps[k];
-                // auto& t = c.translations[k];
-                auto& shape_j = layout.sheet_parts[0][j];
-                auto& jx = shape_j.get_translate_ft_x();
-                auto& jy = shape_j.get_translate_ft_y();
-                auto double_jx = shape_j.get_translate_double_x();
-                auto double_jy = shape_j.get_translate_double_y();
-                Point_2 relative_point(first_x - jx, first_y - jy);
-                // 通常情况下此时pd为0
-                auto pd = comp_pd(*nfp, double_first_x - double_jx,
-                    double_first_y - double_jy, layout);
-                shape_i.set_translate(first_x, first_y);
+
+            auto first = points[0];
+            shape_i.set_translate(first.x(), first.y());
+
+            double double_first_x = CGAL::to_double(first.x());
+            double double_first_y = CGAL::to_double(first.y());
+            for (size_t j = 0; j < num_poly; ++j) {
+                if (j == i) continue;
+                size_t idx_k = (j < i) ? j : j - 1;
+                auto& nfp = c.nfps[idx_k];
+                double double_jx = layout.sheet_parts[0][j].get_translate_double_x();
+                double double_jy = layout.sheet_parts[0][j].get_translate_double_y();
+                FT pd = comp_pd(*nfp, double_first_x - double_jx, double_first_y - double_jy, layout);
                 layout.set_pd(i, j, pd);
             }
         }
-        // 判断初始解是否可行
+
+        // validate initial solution
         auto pure_overlap = layout.get_pure_total_pd();
         if (pure_overlap > geo::BIAS) {
             throw std::runtime_error("Error get_init_solu(): initial solution is not feasible");
         }
-        // 更新layout当前长度
-        //s << "layout update" << std::endl;
+
         layout.update_cur_length();
         layout.best_length = layout.cur_length;
-        // 更新sheet
-        layout.sheets[0].set_width(layout.cur_length);
-        //s << "update best result" << std::endl;
         layout.best_result = layout.sheet_parts;
-        //s << "update best util" << std::endl;
-        layout.best_utilization = CGAL::to_double(
-            layout.area / (layout.best_length * layout.sheets[0].height));
-        //s << "init solu end" << std::endl;
+        double area_d = CGAL::to_double(layout.area);
+        double denom = CGAL::to_double(layout.sheets[0].area());
+        layout.best_utilization = area_d / denom;
     }
+
     bool minimize_overlap(Layout& layout, volatile bool* requestQuit) {
         size_t numIterations = 0;
         FT minOverlap = geo::INF;
@@ -247,7 +341,41 @@ namespace nesting {
                     }
                     // 计算候选点
                     CandidatePoints c(layout.poly_num - 1);
-                    c.set_boundary(geo::comp_ifr(layout.sheets[0].sheet, rotated));
+                    geo::Polygon_2 ifr_poly;
+                    if (!layout.sheets.empty() && layout.sheets[0].is_circle()) {
+                        // build inner circle IFR for rotated shape
+                        auto& sheet = layout.sheets[0];
+                        geo::FT R = sheet.get_radius();
+                        auto first_v = rotated.outer_boundary().vertices_begin();
+                        double max_sq_d = 0.0;
+                        for (auto v = rotated.outer_boundary().vertices_begin(); v != rotated.outer_boundary().vertices_end(); ++v) {
+                            double dx = CGAL::to_double(v->x() - first_v->x());
+                            double dy = CGAL::to_double(v->y() - first_v->y());
+                            double d2 = dx * dx + dy * dy;
+                            if (d2 > max_sq_d) max_sq_d = d2;
+                        }
+                        geo::FT rB = geo::FT(std::sqrt(max_sq_d));
+                        geo::FT innerR = R - rB;
+                        if (innerR > geo::FT(0)) {
+                            const int SEGMENTS = 256;
+                            double cx = CGAL::to_double(R);
+                            double cy = CGAL::to_double(R);
+                            double rr = CGAL::to_double(innerR);
+                            for (int s = 0; s < SEGMENTS; ++s) {
+                                double theta = 2.0 * PI * s / SEGMENTS;
+                                double x = cx + rr * std::cos(theta);
+                                double y = cy + rr * std::sin(theta);
+                                ifr_poly.push_back(Point_2(x, y));
+                            }
+                            Transformation translate(CGAL::TRANSLATION,
+                                Vector_2(-first_v->x(), -first_v->y()));
+                            ifr_poly = transform(translate, ifr_poly);
+                        }
+                    }
+                    else {
+                        ifr_poly = geo::comp_ifr(layout.sheets[0].sheet, rotated);
+                    }
+                    c.set_boundary(ifr_poly);
                     for (size_t k = 0; k < layout.poly_num; k++) {
                         if (k == idx) {
                             continue;
@@ -333,6 +461,7 @@ namespace nesting {
         std::clog << std::endl;
         return false;
     }
+
     void GOMH(Layout& layout,
         size_t max_time,
         std::function<void(const Solution&)> ProgressHandler,
@@ -351,8 +480,16 @@ namespace nesting {
             if (feasible) {
                 layout.best_result = layout.sheet_parts;
                 layout.best_length = (std::min)(layout.best_length, layout.cur_length);
-                layout.best_utilization = CGAL::to_double(
-                    layout.area / (layout.best_length * layout.sheets[0].height));
+                // compute best_utilization differently for circular sheets
+                double area_d = CGAL::to_double(layout.area);
+                double denom;
+                if (!layout.sheets.empty() && layout.sheets[0].is_circle()) {
+                    denom = CGAL::to_double(layout.sheets[0].area());
+                }
+                else {
+                    denom = CGAL::to_double(layout.best_length) * CGAL::to_double(layout.sheets[0].get_height());
+                }
+                layout.best_utilization = area_d / denom;
                 ProgressHandler(Solution(
                     CGAL::to_double(layout.best_length), layout.best_utilization,
                     ((double)(clock() - start) / CLOCKS_PER_SEC), layout.best_result[0]));

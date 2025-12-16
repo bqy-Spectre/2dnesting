@@ -28,6 +28,8 @@ namespace nesting {
         const double part_offset,
         const double sheet_width,
         const double sheet_height,
+        const bool sheet_is_circle,
+        const double sheet_radius,
         const std::vector<nesting::geo::Polygon_with_holes_2>& polygons,
         const std::vector<uint32_t>& items_rotations,
         const std::vector<uint32_t>& items_quantity);

@@ -202,6 +202,9 @@
     <ClCompile Include="libdxfrw\intern\drw_dbg.cpp">
       <Filter>libdxfrw\Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="nesting_gui_destructor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="candidate_points.h">

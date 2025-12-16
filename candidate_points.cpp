@@ -6,27 +6,31 @@ namespace nesting {
             std::iota(begin(I), end(I), 0);
             std::sort(begin(I), end(I), [&](int ia, int ib) {
                 return translate_x[ia] < translate_x[ib];
-                });
+            });
 
             std::vector<hash::NFPCacheValue*> tmp_nfps;
             tmp_nfps.reserve(size);
             for (int j = 0; j < size; ++j) {
-                tmp_nfps.emplace_back(std::move(nfps[I[j]]));
+                tmp_nfps.emplace_back(nfps[I[j]]);
             }
             nfps.swap(tmp_nfps);
 
             std::vector<geo::Transformation> tmp_translations;
             tmp_translations.reserve(size);
             for (int j = 0; j < size; ++j) {
-                tmp_translations.emplace_back(std::move(translations[I[j]]));
+                tmp_translations.emplace_back(translations[I[j]]);
             }
-            nfps.swap(tmp_nfps);
+            // swap translations with the reordered list
+            translations.swap(tmp_translations);
         }
+        translated_nfps.clear();
+        translated_nfps.reserve(size);
         for (int j = 0; j < size; ++j) {
             translated_nfps.push_back(
                 geo::transform_polygon_with_holes(translations[j], nfps[j]->nfp));
         }
     }
+
     std::vector<geo::Point_2> CandidatePoints::get_perfect_points() {
         if (has_boundary) {
             if (boundary.is_empty())
@@ -53,11 +57,24 @@ namespace nesting {
                         hole.vertices_end());
                 }
             }
-            target_region.polygons_with_holes(std::back_inserter(result));
-            return points;
+            // limit number of candidate points to max_candidate_points
+            if (points.size() <= max_candidate_points) {
+                return points;
+            }
+            std::shuffle(points.begin(), points.end(), rand::random_engine1);
+            std::vector<geo::Point_2> filtered;
+            filtered.reserve(max_candidate_points);
+            for (auto& pt : points) {
+                if (filtered.size() >= max_candidate_points) break;
+                if (is_valid(pt)) {
+                    filtered.push_back(pt);
+                }
+            }
+            return filtered;
         }
         return {};
     }
+
     std::vector<geo::Point_2> nesting::CandidatePoints::get_arrangement_points() {
         if (has_boundary) {
             if (boundary.is_empty())
@@ -74,7 +91,6 @@ namespace nesting {
                 start = rand::random01() * (size - batch);
                 end = start + batch;
             }
-            // std::clog << size << ", " << batch << std::endl;
             for (size_t i = start; i < end; i++) {
                 auto& nfp = translated_nfps[i];
                 auto& outer = nfp.outer_boundary();
@@ -88,16 +104,14 @@ namespace nesting {
                         std::back_inserter(edges));
                 }
             }
-            // TODO 可以扩大start和end的范围，然后并行求交点
+            // compute intersection points
             CGAL::compute_intersection_points(edges.begin(), edges.end(),
                 std::back_inserter(points), true);
             std::shuffle(points.begin(), points.end(), rand::random_engine1);
             std::vector<geo::Point_2> filtered;
-            filtered.reserve(points.size());
+            filtered.reserve(std::min(points.size(), max_candidate_points));
             for (auto& pt : points) {
-                if (filtered.size() > max_candidate_points) {
-                    break;
-                }
+                if (filtered.size() >= max_candidate_points) break;
                 if (is_valid(pt)) {
                     filtered.push_back(pt);
                 }

@@ -1,4 +1,9 @@
 ﻿#include "nesting_gui.h"
+#include <cmath>
+
+#ifndef PI
+static constexpr double PI = 3.14159265358979323846;
+#endif
 
 nesting_gui::nesting_gui(QWidget* parent) : QMainWindow(parent) {
     ui.setupUi(this);
@@ -119,7 +124,10 @@ nesting_gui::~nesting_gui() {
     delete series;
     delete axisX;
     delete axisY;
-    delete timer;
+    if (timer) {
+        if (timer->isActive()) timer->stop();
+        delete timer;
+    }
 }
 
 void nesting_gui::createSheet() {
@@ -129,28 +137,40 @@ void nesting_gui::createSheet() {
             "Currently, only one sheet is allowed to be used.");
         return;
     }
+    // Prompt user for circle radius
+    bool ok = false;
+    double r = QInputDialog::getDouble(this, tr("Create Circular Sheet"),
+        tr("Radius"), 100.0, 0.0, 1e9, 4, &ok);
+    if (!ok) return;
+    double d = r * 2.0;
+
     ui.tabWidget->setCurrentIndex(1);
-    QDialog dialog(this);
-    UICreateSheetDialog.setupUi(&dialog);
-    UICreateSheetDialog.label_3->setVisible(false);
-    UICreateSheetDialog.quantity->setVisible(false);
-    if (QDialog::Accepted == dialog.exec()) {
-        auto width = UICreateSheetDialog.width->value();
-        auto height = UICreateSheetDialog.height->value();
-        auto quantity = UICreateSheetDialog.quantity->value();
-        ui.sheetsTable->insertRow(rowIndex);
-        auto i1 = new QTableWidgetItem();
-        i1->setData(Qt::DisplayRole, width);
-        ui.sheetsTable->setItem(rowIndex, 0, i1);
-        auto i2 = new QTableWidgetItem();
-        i2->setData(Qt::DisplayRole, height);
-        ui.sheetsTable->setItem(rowIndex, 1, i2);
-        auto i4 = new QTableWidgetItem();
-        QPolygonF p({ QPointF(0, 0), QPointF(width, 0), QPointF(width, height),
-                     QPointF(0, height) });
-        i4->setData(Qt::DisplayRole, p);
-        ui.sheetsTable->setItem(rowIndex, 2, i4);
+    ui.sheetsTable->insertRow(rowIndex);
+    auto i1 = new QTableWidgetItem();
+    auto i2 = new QTableWidgetItem();
+    auto i4 = new QTableWidgetItem();
+
+    // store diameter in both length/width columns and mark as circle
+    i1->setData(Qt::DisplayRole, d);
+    i2->setData(Qt::DisplayRole, d);
+    i1->setData(Qt::UserRole, QString("Circle"));
+
+    // preview polygon approximation of circle
+    QPolygonF p;
+    const int SEGMENTS = 64;
+    qreal cx = d / 2.0;
+    qreal cy = d / 2.0;
+    for (int ii = 0; ii < SEGMENTS; ++ii) {
+        qreal theta = 2.0 * PI * ii / SEGMENTS;
+        qreal x = cx + (d / 2.0) * std::cos(theta);
+        qreal y = cy + (d / 2.0) * std::sin(theta);
+        p.append(QPointF(x, y));
     }
+    i4->setData(Qt::DisplayRole, p);
+
+    ui.sheetsTable->setItem(rowIndex, 0, i1);
+    ui.sheetsTable->setItem(rowIndex, 1, i2);
+    ui.sheetsTable->setItem(rowIndex, 2, i4);
 }
 
 void nesting_gui::openCSV() {
@@ -340,7 +360,21 @@ void nesting_gui::start() {
     QTableWidgetItem* i1 = ui.sheetsTable->item(0, 1);
     double sheet_width = i0->data(Qt::DisplayRole).value<double>();
     double sheet_height = i1->data(Qt::DisplayRole).value<double>();
-    ui.openGLWidget->set_sheet(sheet_width, sheet_height);
+    bool sheet_is_circle = false;
+    double sheet_radius = 0.0;
+    if (i0->data(Qt::UserRole).isValid()) {
+        auto t = i0->data(Qt::UserRole).toString();
+        if (t == "Circle") {
+            sheet_is_circle = true;
+            sheet_radius = sheet_width / 2.0;
+        }
+    }
+    // 更新OpenGL显示板材边界（圆或矩形）
+    if (sheet_is_circle) {
+        ui.openGLWidget->set_sheet_circle(sheet_radius);
+    } else {
+        ui.openGLWidget->set_sheet_rect(sheet_width, sheet_height);
+    }
     // 时间参数
     int seconds = 24 * 3600;
     if (ui.fixRun->isChecked()) {
@@ -379,7 +413,7 @@ void nesting_gui::start() {
     time = 0;
     timer->start(1000);
     startWork(need_simplify, top_offset, left_offset, bottom_offset, right_offset,
-        part_offset, sheet_width, sheet_height, seconds, polygons,
+        part_offset, sheet_width, sheet_height, sheet_is_circle, sheet_radius, seconds, polygons,
         allowed_rotations, quantity);
 }
 
@@ -459,6 +493,8 @@ void nesting_gui::startWork(
     const double part_offset,
     const double sheet_width,
     const double sheet_height,
+    const bool sheet_is_circle,
+    const double sheet_radius,
     const size_t max_time,
     const std::vector<nesting::geo::Polygon_with_holes_2>& polygons,
     const std::vector<uint32_t>& items_rotations,
@@ -470,7 +506,7 @@ void nesting_gui::startWork(
     connect(worker, &Worker::finished, this, &nesting_gui::handleFinished);
     connect(worker, &Worker::sendMessage, this, &nesting_gui::handleMessage);
     worker->set(need_simplify, top_offset, left_offset, bottom_offset,
-        right_offset, part_offset, sheet_width, sheet_height, max_time,
+        right_offset, part_offset, sheet_width, sheet_height, sheet_is_circle, sheet_radius, max_time,
         polygons, items_rotations, items_quantity);
     worker->start();
     qDebug() << "start work END";
