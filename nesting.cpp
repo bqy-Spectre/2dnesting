@@ -1,5 +1,6 @@
 ﻿#include "nesting.h"
 #include <cmath>
+#include <algorithm>
 
 // Define PI for MSVC where M_PI may be unavailable
 #ifndef PI
@@ -7,6 +8,23 @@ static constexpr double PI = 3.14159265358979323846;
 #endif
 
 namespace nesting {
+    // Compute utilization using used rectangular area = length * sheet_height.
+    // For circular sheets use height = 2*radius (diameter). Cap at 1.0.
+    static double compute_util(const Layout& layout, double length) {
+        if (layout.sheets.empty()) return 0.0;
+        double area_d = CGAL::to_double(layout.area);
+        double height = CGAL::to_double(layout.sheets[0].get_height());
+        if (layout.sheets[0].is_circle() && height <= 0.0) {
+            height = 2.0 * CGAL::to_double(layout.sheets[0].get_radius());
+        }
+        if (length <= 0.0 || height <= 0.0) return 0.0;
+        const double EPS = 1e-12;
+        double rect_area = length * height + EPS;
+        double util = area_d / rect_area;
+        if (util > 1.0) util = 1.0;
+        return util;
+    }
+
     NFPCacheValue& comp_nfp(const Polygon_with_holes_2* poly_A,
         const uint32_t rotation_A,
         const uint32_t allowed_rotation_A,
@@ -162,6 +180,8 @@ namespace nesting {
         if (!layout.sheets.empty() && !layout.sheets[0].is_circle()) {
             layout.sheets[0].set_width(layout.cur_length);
         }
+        // Update current utilization using cur_length (works for rectangle and circle)
+        layout.best_utilization = compute_util(layout, CGAL::to_double(layout.cur_length));
     }
 
     void get_init_solu(Layout& layout) {
@@ -300,9 +320,8 @@ namespace nesting {
         layout.update_cur_length();
         layout.best_length = layout.cur_length;
         layout.best_result = layout.sheet_parts;
-        double area_d = CGAL::to_double(layout.area);
-        double denom = CGAL::to_double(layout.sheets[0].area());
-        layout.best_utilization = area_d / denom;
+        // compute best_utilization using used rectangular area (best_length * sheet_height)
+        layout.best_utilization = compute_util(layout, CGAL::to_double(layout.best_length));
     }
 
     bool minimize_overlap(Layout& layout, volatile bool* requestQuit) {
@@ -480,16 +499,8 @@ namespace nesting {
             if (feasible) {
                 layout.best_result = layout.sheet_parts;
                 layout.best_length = (std::min)(layout.best_length, layout.cur_length);
-                // compute best_utilization differently for circular sheets
-                double area_d = CGAL::to_double(layout.area);
-                double denom;
-                if (!layout.sheets.empty() && layout.sheets[0].is_circle()) {
-                    denom = CGAL::to_double(layout.sheets[0].area());
-                }
-                else {
-                    denom = CGAL::to_double(layout.best_length) * CGAL::to_double(layout.sheets[0].get_height());
-                }
-                layout.best_utilization = area_d / denom;
+                // compute best_utilization using used rectangular area (best_length * sheet_height)
+                layout.best_utilization = compute_util(layout, CGAL::to_double(layout.best_length));
                 ProgressHandler(Solution(
                     CGAL::to_double(layout.best_length), layout.best_utilization,
                     ((double)(clock() - start) / CLOCKS_PER_SEC), layout.best_result[0]));
