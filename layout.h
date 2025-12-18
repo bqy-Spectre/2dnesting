@@ -59,6 +59,68 @@ namespace nesting {
         // 总面积
         FT area{ 0 };
         bool isRequestQuit{ false };
+
+        // --- 新增：零件管理字段与方法 ---
+        struct ManagedPart {
+            Polygon_with_holes_2 polygon;
+            double area{0.0};
+            bool placed{false};
+            size_t original_index{0};
+        };
+
+        std::vector<ManagedPart> all_parts;   // 所有可用零件
+        std::vector<size_t> placed_indices;   // 已放置零件的索引（索引指向 all_parts）
+        double total_parts_area{0.0};         // 已放置零件的总面积
+
+        // 初始化 all_parts 列表
+        void init_all_parts(const std::vector<Polygon_with_holes_2>& parts) {
+            all_parts.clear();
+            all_parts.reserve(parts.size());
+            for (size_t i = 0; i < parts.size(); ++i) {
+                ManagedPart mp;
+                mp.polygon = parts[i];
+                mp.area = CGAL::to_double(geo::pwh_area(parts[i]));
+                mp.placed = false;
+                mp.original_index = i;
+                all_parts.push_back(std::move(mp));
+            }
+            placed_indices.clear();
+            total_parts_area = 0.0;
+        }
+
+        // 返回未放置零件的指针列表
+        std::vector<ManagedPart*> get_unplaced_parts() {
+            std::vector<ManagedPart*> result;
+            result.reserve(all_parts.size());
+            for (auto& mp : all_parts) {
+                if (!mp.placed) result.push_back(&mp);
+            }
+            return result;
+        }
+
+        // 标记某个 ManagedPart 为已放置（并更新 placed_indices 与 total_parts_area）
+        void mark_part_placed(size_t all_parts_index, size_t placed_index_in_sheet_parts = SIZE_MAX) {
+            if (all_parts_index >= all_parts.size()) return;
+            if (all_parts[all_parts_index].placed) return;
+            all_parts[all_parts_index].placed = true;
+            placed_indices.push_back(all_parts_index);
+            total_parts_area += all_parts[all_parts_index].area;
+            // placed_index_in_sheet_parts 可用于将 all_parts 索引映射到 sheet_parts 的位置（如需要）
+        }
+
+        // 标记某个 ManagedPart 为未放置（并更新 placed_indices 与 total_parts_area）
+        void mark_part_unplaced(size_t all_parts_index) {
+            if (all_parts_index >= all_parts.size()) return;
+            if (!all_parts[all_parts_index].placed) return;
+            all_parts[all_parts_index].placed = false;
+            // 从 placed_indices 中移除该索引
+            auto it = std::find(placed_indices.begin(), placed_indices.end(), all_parts_index);
+            if (it != placed_indices.end()) placed_indices.erase(it);
+            total_parts_area -= all_parts[all_parts_index].area;
+            if (total_parts_area < 1e-12) total_parts_area = 0.0;
+        }
+
+        // --- 其它现有声明保持不变 ---
         /// @brief 存放一个规范多边形，规范多边形的意思是其第一个顶点平移到(0, 0)处
         /// @param poly 需要存放的规范多边形
         /// @return 指向该多边形的一个指针
