@@ -38,6 +38,11 @@ namespace nesting {
         const uint32_t allowed_rotation_B,
         Layout& layout);
 
+    // Lightweight overload kept for older call sites: forwards to full comp_nfp with default rotations
+    NFPCacheValue& comp_nfp(const Polygon_with_holes_2* poly_A,
+        const Polygon_with_holes_2* poly_B,
+        Layout& layout);
+
     /// @brief 计算point(px, py)相对v.nfp的pd
     /// @param v NFPCacheValue& v
     /// @param px point的x坐标
