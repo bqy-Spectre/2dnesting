@@ -30,14 +30,5 @@ This software can be divided into an engine part and a UI part. The engine is ma
 - [wyhash](https://github.com/wangyi-fudan/wyhash). Used for fast hashing, already included in this Git (wyhash.h).
 - [emhash](https://github.com/ktprime/emhash) 2.1.0. Used for fast hashing, already included in this Git (lru_size.h).
 
-## Other
-This is my undergraduate graduation project. If you have used or referenced this project, please bear **the risk of plagiarism check** on your own.
-
-If you need a similar graduation project, I would recommend using this project in an improved way, including the following three points:
-
-1. **Implement a meta heuristic optimization algorithm based on this project**, such as Guckoo Search, GA or DBO.
-2. **Use multithreading**. On the one hand, multi-threaded parallelism can be used for computing acceleration (such as OpenMP), and on the other hand, multi-threaded approaches can be used to obtain more diverse results, such as using different random seeds for each thread. The latter seems to be more important than the former.
-3. **Improve the basic framework of this project**. For example, further utilizing CGAL and replacing high-precision numerical types with `double`.
-
 ## License
 Due to CGAL using the GPL3.0 license, this project can only use the GPL3.0 license. There will be no further major updates for this project, but you are free to ask any questions.
