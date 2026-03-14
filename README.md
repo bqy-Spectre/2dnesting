@@ -20,4 +20,4 @@ This software can be divided into an engine part and a UI part. The engine is ma
 - [emhash](https://github.com/ktprime/emhash) 2.1.0. Used for fast hashing, already included in this Git (lru_size.h).
 
 ## License
-Due to CGAL using the GPL3.0 license, this project can only use the GPL3.0 license. There will be no further major updates for this project, but you are free to ask any questions.
+Due to CGAL using the GPL3.0 license, this project can only use the GPL3.0 license. 
