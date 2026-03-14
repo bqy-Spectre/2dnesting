@@ -4,19 +4,8 @@ This software attempts to solve some simple two-dimensional irregular strip pack
 
 ![image](https://github.com/user-attachments/assets/3469f341-5c5b-43ee-93db-96521831f84c)
 
-Here are two examples: 
-
-![example1](https://github.com/lryan599/2DNesting/assets/77947703/bc9babaf-d8ee-4fea-a4ad-944ac4ebf495)
-
-![example2](https://github.com/lryan599/2DNesting/assets/77947703/62cb334d-184d-49cd-b552-52b9766b3761)
-
 ## How to use
 Please open `nesting_gui.sln` using Visual Studio. The files are well organized in VS.
-
-## Best results on ESICUP datasets:
-![results](https://github.com/lryan599/2DNesting/assets/77947703/3cbc7f79-6b2b-463c-9473-8f5c38939c82)
-
-Note: [Here](https://github.com/lryan599/2DNesting/tree/main/records) is the log of experimental results.
 
 ## Dependencies
 This software can be divided into an engine part and a UI part. The engine is mainly based on CGAL, and the UI is mainly based on Qt. In addition to these two libraries, there are also some other open source libraries applied to this project.
