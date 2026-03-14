@@ -1,6 +1,6 @@
 # 2DNesting
 ## Description
-This software attempts to solve some simple two-dimensional irregular strip packing problems.
+This software attempts to solve some simple two-dimensional irregular strip packing problems.My personal project is in circle branch.
 
 ![image](https://github.com/user-attachments/assets/3469f341-5c5b-43ee-93db-96521831f84c)
 
